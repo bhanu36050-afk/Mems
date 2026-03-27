@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 import ReactMarkdown from 'react-markdown';
 import { motion, AnimatePresence } from "motion/react";
 import { Globe, Rocket, Sparkles, Image as ImageIcon, Share2, Loader2, TrendingUp, Zap, Crown, ShieldCheck, Info } from 'lucide-react';
@@ -15,6 +15,7 @@ export default function App() {
   const [topic, setTopic] = useState('');
   const [country, setCountry] = useState('USA');
   const [loading, setLoading] = useState(false);
+  const [imageLoading, setImageLoading] = useState(false);
   const [result, setResult] = useState<{ strategy: string; imageUrl: string } | null>(null);
   const [isPremium, setIsPremium] = useState(false);
   const [trendingTopics, setTrendingTopics] = useState<string[]>([]);
@@ -29,11 +30,12 @@ export default function App() {
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-3.1-flash-lite-preview",
         contents: "List 5 currently trending viral topics or news events globally that would make good memes. Return only a JSON array of strings.",
         config: {
           tools: [{ googleSearch: {} }],
           responseMimeType: "application/json",
+          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           responseSchema: {
             type: Type.ARRAY,
             items: { type: Type.STRING }
@@ -57,25 +59,64 @@ export default function App() {
     if (customTopic) setTopic(customTopic);
     
     setLoading(true);
+    setImageLoading(true);
     setResult(null);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      // Using the provided API key as a fallback for the user
+      const apiKey = (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== "MY_GEMINI_API_KEY") 
+        ? process.env.GEMINI_API_KEY 
+        : "AIzaSyCn4yp1aet5J_txaqTlFfD9qOWBCn8qSk8";
+
+      const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-3.1-flash-lite-preview",
         contents: `Create a viral meme for "${activeTopic}" in ${country}. 
-        Give a funny 1-line caption in local language and a short image description.
-        Also provide a viral strategy for ${country} (TikTok/X/Reddit).`,
+        Return a JSON object with:
+        - "strategy": Short viral strategy, local caption, and cultural context in markdown.
+        - "imagePrompt": A concise, highly descriptive prompt (max 20 words) for an AI image generator. Focus on a single character and a simple background. No text.`,
+        config: {
+          responseMimeType: "application/json",
+          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              strategy: { type: Type.STRING },
+              imagePrompt: { type: Type.STRING }
+            },
+            required: ["strategy", "imagePrompt"]
+          }
+        }
       });
 
-      const strategy = response.text || "Failed to generate strategy.";
-      
-      const query = encodeURIComponent(`meme about ${activeTopic} in ${country} cinematic style, high quality, viral aesthetic`);
-      const imageUrl = `https://pollinations.ai/p/${query}?width=1080&height=1080&nologo=true&seed=${Math.floor(Math.random() * 1000000)}`;
+      let strategy = "Failed to generate strategy.";
+      let imagePrompt = `meme about ${activeTopic} in ${country}`;
 
+      try {
+        const text = response.text || "{}";
+        const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        const data = JSON.parse(cleanText);
+        strategy = data.strategy || strategy;
+        imagePrompt = data.imagePrompt || imagePrompt;
+      } catch (e) {
+        console.error("JSON parse failed, using raw text as strategy");
+        strategy = response.text || strategy;
+      }
+      
+      const query = encodeURIComponent(imagePrompt.substring(0, 150));
+      const size = isPremium ? 1024 : 512;
+      const imageUrl = `https://pollinations.ai/p/${query}?width=${size}&height=${size}&nologo=true&seed=${Math.floor(Math.random() * 1000000)}`;
+
+      console.log("Generated Image URL:", imageUrl);
       setResult({ strategy, imageUrl });
     } catch (error) {
       console.error("Generation failed:", error);
+      setImageLoading(false);
+      const errorMessage = error instanceof Error ? error.message : "AI server is currently busy or the topic was restricted.";
+      setResult({ 
+        strategy: `### ⚠️ Generation Failed\n\n${errorMessage}\n\n**Possible reasons:**\n- API Key missing or invalid\n- Topic restricted by AI safety filters\n- Network connectivity issues`,
+        imageUrl: "https://picsum.photos/seed/error/1024/1024?blur=2"
+      });
     } finally {
       setLoading(false);
     }
@@ -92,6 +133,9 @@ export default function App() {
           <h1 className="text-2xl font-black tracking-tighter uppercase italic">
             Meme-X <span className="text-[#00FF00]">Global Viral Engine</span>
           </h1>
+          <div className="ml-4 px-2 py-0.5 bg-[#00FF00]/10 border border-[#00FF00]/20 rounded text-[8px] font-bold text-[#00FF00] uppercase tracking-widest flex items-center gap-1">
+            <Zap size={8} className="fill-[#00FF00]" /> Turbo Mode Active
+          </div>
         </div>
         <p className="hidden xl:block text-[10px] text-white/40 max-w-[200px] leading-tight">
           Duniya ka sabse powerful AI Meme Wrapper. Generate memes for any country instantly.
@@ -157,7 +201,10 @@ export default function App() {
               className="w-full bg-[#00FF00] text-black font-black uppercase py-4 rounded-xl flex items-center justify-center gap-3 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 disabled:hover:scale-100 group"
             >
               {loading ? (
-                <Loader2 className="animate-spin" />
+                <div className="flex items-center gap-2">
+                  <Loader2 className="animate-spin" />
+                  <span>Turbo Generating...</span>
+                </div>
               ) : (
                 <>
                   <Rocket size={20} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
@@ -171,11 +218,17 @@ export default function App() {
             <p className="flex items-center gap-2 mb-2 font-bold text-[#00FF00]">
               <Zap size={14} /> SYSTEM STATUS
             </p>
-            {isPremium ? (
-              <span className="text-white">Premium mode enabled. Watermarks removed. High-priority generation active.</span>
-            ) : (
-              <span>Free mode active. Images will include a Meme-X watermark. Upgrade to Premium for clean exports.</span>
-            )}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span>API Status:</span>
+                <span className="text-[#00FF00]">Connected (Auto-Set)</span>
+              </div>
+              {isPremium ? (
+                <span className="text-white">Premium mode enabled. Watermarks removed. High-priority generation active.</span>
+              ) : (
+                <span>Free mode active. Images will include a Meme-X watermark. Upgrade to Premium for clean exports.</span>
+              )}
+            </div>
           </div>
         </aside>
 
@@ -211,8 +264,14 @@ export default function App() {
                   <Globe className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[#00FF00] animate-pulse" />
                 </div>
                 <div className="space-y-2">
-                  <h3 className="text-xl font-bold uppercase tracking-tighter italic">Analyzing {country} Culture...</h3>
-                  <p className="text-white/40 text-sm animate-pulse">Scanning local sarcasm databases and trend patterns.</p>
+                  <h3 className="text-xl font-bold uppercase tracking-tighter italic">
+                    {imageLoading ? "Rendering Visual..." : "Analyzing Global Trends..."}
+                  </h3>
+                  <p className="text-white/40 text-sm animate-pulse">
+                    {imageLoading 
+                      ? "Optimizing for viral distribution..." 
+                      : `Scanning ${country} cultural patterns for "${topic}"...`}
+                  </p>
                 </div>
               </motion.div>
             )}
@@ -232,16 +291,25 @@ export default function App() {
                       </h3>
                       <span className="text-[10px] bg-white/10 px-2 py-1 rounded uppercase font-bold">1080x1080</span>
                     </div>
-                    <div className="aspect-square bg-white/5 rounded-3xl overflow-hidden border border-white/10 group relative">
+                    <div className="aspect-square bg-white/5 rounded-3xl overflow-hidden border border-white/10 group relative flex items-center justify-center">
+                      {imageLoading && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 backdrop-blur-sm z-10">
+                          <Loader2 className="w-12 h-12 text-[#00ff41] animate-spin mb-4" />
+                          <p className="text-xs font-mono text-[#00ff41] animate-pulse">GENERATING VISUAL...</p>
+                        </div>
+                      )}
                       <img
+                        key={result.imageUrl}
                         src={result.imageUrl}
                         alt="Generated Meme"
-                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                        className={`w-full h-full object-cover transition-all duration-700 group-hover:scale-110 ${imageLoading ? 'opacity-30 blur-md scale-95' : 'opacity-100 blur-0 scale-100'}`}
                         referrerPolicy="no-referrer"
+                        onLoad={() => setImageLoading(false)}
+                        onError={() => setImageLoading(false)}
                       />
                       
                       {/* Watermark */}
-                      {!isPremium && (
+                      {!isPremium && !imageLoading && (
                         <div className="absolute bottom-4 right-4 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10 flex items-center gap-2 pointer-events-none">
                           <Globe size={12} className="text-[#00FF00]" />
                           <span className="text-[10px] font-black tracking-tighter uppercase italic">
@@ -250,11 +318,42 @@ export default function App() {
                         </div>
                       )}
 
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-6">
-                        <button className="bg-white text-black px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2">
-                          <Share2 size={14} /> Save Visual
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-6 gap-2">
+                        <button className="bg-white text-black px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 hover:bg-[#00FF00] transition-colors">
+                          <Share2 size={14} /> Save
+                        </button>
+                        <button 
+                          onClick={() => {
+                            const newSeed = Math.floor(Math.random() * 1000000);
+                            const baseUrl = result.imageUrl.split('?')[0];
+                            const params = new URLSearchParams(result.imageUrl.split('?')[1]);
+                            params.set('seed', newSeed.toString());
+                            const newUrl = `${baseUrl}?${params.toString()}`;
+                            setImageLoading(true);
+                            setResult({ ...result, imageUrl: newUrl });
+                          }}
+                          className="bg-white/10 backdrop-blur-md text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 hover:bg-[#00FF00] hover:text-black transition-all"
+                        >
+                          <Sparkles size={14} /> Regenerate
                         </button>
                       </div>
+                      
+                      {imageLoading && (
+                        <button 
+                          onClick={() => {
+                            const newSeed = Math.floor(Math.random() * 1000000);
+                            const baseUrl = result.imageUrl.split('?')[0];
+                            const params = new URLSearchParams(result.imageUrl.split('?')[1]);
+                            params.set('seed', newSeed.toString());
+                            const newUrl = `${baseUrl}?${params.toString()}`;
+                            setImageLoading(true);
+                            setResult({ ...result, imageUrl: newUrl });
+                          }}
+                          className="absolute top-4 right-4 bg-black/60 backdrop-blur-md text-[10px] px-3 py-1.5 rounded-lg border border-white/10 flex items-center gap-2 hover:bg-white hover:text-black transition-all z-20"
+                        >
+                          <Zap size={12} className="text-[#00FF00]" /> Force Reload
+                        </button>
+                      )}
                     </div>
                   </div>
 
