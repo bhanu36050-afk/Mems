@@ -63,13 +63,9 @@ export default function App() {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: `Create a viral meme strategy for "${activeTopic}" in ${country}. 
-        Use local sarcasm, slang, and cultural references specific to ${country}. 
-        Format your response clearly with:
-        1. **The Hook**: A catchy, culturally relevant hook.
-        2. **Local Caption**: The actual text that would go on the meme.
-        3. **Visual Description**: Detailed description of what the image should look like.
-        4. **Viral Strategy**: Why this will work in ${country} (TikTok/X/Reddit).`,
+        contents: `Create a viral meme for "${activeTopic}" in ${country}. 
+        Give a funny 1-line caption in local language and a short image description.
+        Also provide a viral strategy for ${country} (TikTok/X/Reddit).`,
       });
 
       const strategy = response.text || "Failed to generate strategy.";
@@ -94,9 +90,12 @@ export default function App() {
             <Globe className="text-black w-6 h-6" />
           </div>
           <h1 className="text-2xl font-black tracking-tighter uppercase italic">
-            Meme-X <span className="text-[#00FF00]">Global</span>
+            Meme-X <span className="text-[#00FF00]">Global Viral Engine</span>
           </h1>
         </div>
+        <p className="hidden xl:block text-[10px] text-white/40 max-w-[200px] leading-tight">
+          Duniya ka sabse powerful AI Meme Wrapper. Generate memes for any country instantly.
+        </p>
         
         <div className="flex items-center gap-6">
           {/* Premium Toggle */}
@@ -314,16 +313,31 @@ export default function App() {
           {!isPremium && (
             <div className="bg-gradient-to-br from-[#00FF00]/20 to-transparent border border-[#00FF00]/30 p-6 rounded-2xl space-y-4">
               <h4 className="text-sm font-bold flex items-center gap-2">
-                <Crown size={16} className="text-[#00FF00]" /> Unlock Pro
+                <Crown size={16} className="text-[#00FF00]" /> Upgrade to PRO Mode
               </h4>
               <p className="text-[10px] text-white/60 leading-relaxed">
-                Remove watermarks, get 4K generations, and access exclusive cultural databases.
+                Get HD Quality (FLUX.1), No Watermark, and 24/7 Global Trends.
               </p>
+              
+              {/* PayPal Button Integration */}
+              <div className="pt-2">
+                <form action="https://www.paypal.com/cgi-bin/webscr" method="post" target="_top" className="flex justify-center">
+                  <input type="hidden" name="cmd" value="_s-xclick" />
+                  <input type="hidden" name="hosted_button_id" value="YOUR_PAYPAL_ID" />
+                  <button 
+                    type="submit"
+                    className="w-full py-3 bg-[#00FF00] text-black text-[10px] font-black uppercase rounded-lg hover:scale-[1.02] transition-transform flex items-center justify-center gap-2"
+                  >
+                    <Share2 size={14} /> Subscribe via PayPal
+                  </button>
+                </form>
+              </div>
+
               <button 
                 onClick={() => setIsPremium(true)}
-                className="w-full py-2 bg-[#00FF00] text-black text-[10px] font-black uppercase rounded-lg"
+                className="w-full py-2 border border-white/10 text-white/40 text-[8px] uppercase tracking-widest rounded-lg hover:text-white transition-colors"
               >
-                Upgrade Now
+                Simulate Pro Activation (Dev Only)
               </button>
             </div>
           )}
